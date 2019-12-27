@@ -53,10 +53,18 @@ contract SupplyChain {
     require(msg.sender == owner);
     _;
   }
+  modifier isSeller(uint _sku) {
+    require(items[_sku].seller == msg.sender);
+    _;
+  }
+
+  modifier isBuyer(uint _sku){
+    require(msg.sender == items[_sku].buyer);
+    _;
+  }
 
   modifier verifyCaller (address _address) { require (msg.sender == _address); _;}
-
-  modifier paidEnough(uint _price) { require(msg.value >= _price); _;}
+  
   modifier checkValue(uint _sku) {
     //refund them after pay for item (why it is before, _ checks for logic before func)
     _;
@@ -73,22 +81,22 @@ contract SupplyChain {
    Hint: What item properties will be non-zero when an Item has been added?
    */
   modifier forSale(uint _sku) {
-    require(uint(items[_sku].state) == 0);
+    require(uint(items[_sku].state) >= 0);
     _;
   }
 
   modifier sold(uint _sku){
-    require(uint(items[_sku].state)== 1);
+    require(uint(items[_sku].state) >= 1);
     _;
   }
 
   modifier shipped(uint _sku) {
-    require(uint(items[_sku].state) == 2);
+    require(uint(items[_sku].state) >= 2);
     _;
   }
 
   modifier received(uint _sku) {
-    require(uint(items[_sku].state) == 3);
+    require(uint(items[_sku].state) >= 3);
     _;
   }
 
@@ -100,8 +108,8 @@ contract SupplyChain {
   }
 
   function addItem(string memory _name, uint _price) public returns(bool){
-    emit LogForSale(skuCount);
     items[skuCount] = Item({name: _name, sku: skuCount, price: _price, state: State.ForSale, seller: msg.sender, buyer: address(0)});
+    emit LogForSale(skuCount);
     skuCount = skuCount + 1;
     return true;
   }
@@ -112,33 +120,39 @@ contract SupplyChain {
     if the buyer paid enough, and check the value after the function is called to make sure the buyer is
     refunded any excess ether sent. Remember to call the event associated with this function!*/
 
-  function buyItem(uint sku) /// HALP WITH THIS FUNCTION!
-    public payable forSale(sku) sold(sku) isOwner
+  function buyItem(uint sku)
+    public payable forSale(sku)
   {
     // set the buyer as the person who called this transaction (done by isOwner)
-    // require(items[sku].buyer == tx.origin);
+     //setting state to sold with value 1;
     require(msg.value >= items[sku].price);
-     //setting state to sold with value 1
-    items[sku].buyer.transfer(items[sku].price);
+    Item storage item = items[sku];
+
+    address payable seller = item.seller;
+    item.buyer = msg.sender;
+    uint price = item.price;
+    seller.transfer(price);
     emit LogSold(sku);
-    items[sku].state = State.Sold;
+    item.state = State.Sold;
   }
 
   /* Add 2 modifiers to check if the item is sold already, and that the person calling this function
   is the seller. Change the state of the item to shipped. Remember to call the event associated with this function!*/
-  function shipItem(uint sku) sold(sku) isOwner 
+  function shipItem(uint sku) sold(sku) isSeller(sku)
     public
   {
-    items[sku].state = State.Shipped;//change the state of the item to shipped...same problem as buyItem function
+    Item storage item = items[sku];
+    item.state = State.Shipped;
     emit LogShipped(sku);
   }
 
   /* Add 2 modifiers to check if the item is shipped already, and that the person calling this function
   is the buyer. Change the state of the item to received. Remember to call the event associated with this function!*/
-  function receiveItem(uint sku) shipped(sku) isOwner
+  function receiveItem(uint sku) shipped(sku) isBuyer(sku)
     public
   {
-    items[sku].state = State.Received;//change the state of the item to received
+    Item storage item = items[sku]; //change the state of the item to received
+    item.state = State.Received;
     emit LogReceived(sku);
   }
 
